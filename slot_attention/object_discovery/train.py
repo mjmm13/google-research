@@ -28,11 +28,11 @@ import slot_attention.utils as utils
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("model_dir", "/tmp/object_discovery/",
+flags.DEFINE_string("model_dir", "/home/mmcneil/MIL_220204",
                     "Where to save the checkpoints.")
 flags.DEFINE_integer("seed", 0, "Random seed.")
 flags.DEFINE_integer("batch_size", 64, "Batch size for the model.")
-flags.DEFINE_integer("num_slots", 7, "Number of slots in Slot Attention.")
+flags.DEFINE_integer("num_slots", 15, "Number of slots in Slot Attention.")
 flags.DEFINE_integer("num_iterations", 3, "Number of attention iterations.")
 flags.DEFINE_float("learning_rate", 0.0004, "Learning rate.")
 flags.DEFINE_integer("num_train_steps", 500000, "Number of training steps.")
@@ -62,9 +62,16 @@ def train_step(batch, model, optimizer):
 
   return loss_value
 
+def quater_image(image):
+    crops = np.stack(np.split(image, 2))
+    crops = np.concatenate(np.split(crops, 2,2), axis=0)
+    return crops
 
 def main(argv):
   del argv
+  if not os.path.exists('/home/mmcneil/log_220204/'):
+      os.makedirs('/home/mmcneil/log_220204/')
+  logging.get_absl_handler().use_absl_log_file('absl_logging', '/home/mmcneil/log_220204/')
   # Hyperparameters of the model.
   batch_size = FLAGS.batch_size
   num_slots = FLAGS.num_slots
@@ -78,9 +85,11 @@ def main(argv):
   resolution = (128, 128)
 
   # Build dataset iterators, optimizers and model.
-  data_iterator = data_utils.build_clevr_iterator(
-      batch_size, split="train", resolution=resolution, shuffle=True,
-      max_n_objects=6, get_properties=False, apply_crop=True)
+#  data_iterator = data_utils.build_clevr_iterator(
+#      batch_size, split="train", resolution=resolution, shuffle=True,
+#      max_n_objects=6, get_properties=False, apply_crop=True)
+  train_folder = np.load("/home/mmcneil/amartel_data3/mmcneil/fold1/images/fold1/images.npy")
+  data_iterator = iter(train_folder)
 
   optimizer = tf.keras.optimizers.Adam(base_learning_rate, epsilon=1e-08)
 
@@ -102,8 +111,17 @@ def main(argv):
 
   start = time.time()
   for _ in range(num_train_steps):
-    batch = next(data_iterator)
-
+    #batch = next(data_iterator)
+    try:
+      first = quater_image(next(data_iterator))
+      second = quater_image(next(data_iterator))
+      batch = np.concatenate((first, second), axis=0)
+    except StopIteration:
+      data_iterator = iter(train_folder)
+      first = quater_image(next(data_iterator))
+      second = quater_image(next(data_iterator))
+      batch = np.concatenate((first, second), axis=0)
+      
     # Learning rate warm-up.
     if global_step < warmup_steps:
       learning_rate = base_learning_rate * tf.cast(
