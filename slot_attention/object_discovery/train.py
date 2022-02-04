@@ -15,11 +15,13 @@
 
 """Training loop for object discovery with Slot Attention."""
 import datetime
+import os
 import time
 
 from absl import app
 from absl import flags
 from absl import logging
+import numpy as np
 import tensorflow as tf
 
 import slot_attention.data as data_utils
