@@ -30,10 +30,10 @@ import slot_attention.utils as utils
 
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("model_dir", "/home/mmcneil/MIL_220204",
+flags.DEFINE_string("model_dir", "/home/mmcneil/MIL_220207",
                     "Where to save the checkpoints.")
 flags.DEFINE_integer("seed", 0, "Random seed.")
-flags.DEFINE_integer("batch_size", 64, "Batch size for the model.")
+flags.DEFINE_integer("batch_size", 8, "Batch size for the model.")
 flags.DEFINE_integer("num_slots", 15, "Number of slots in Slot Attention.")
 flags.DEFINE_integer("num_iterations", 3, "Number of attention iterations.")
 flags.DEFINE_float("learning_rate", 0.0004, "Learning rate.")
@@ -53,9 +53,10 @@ def train_step(batch, model, optimizer):
 
   # Get the prediction of the models and compute the loss.
   with tf.GradientTape() as tape:
-    preds = model(batch["image"], training=True)
+    normalized = ((batch[0]/255)-0.5)*2
+    preds = model(normalized, training=True)
     recon_combined, recons, masks, slots = preds
-    loss_value = utils.l2_loss(batch["image"], recon_combined)
+    loss_value = utils.l2_loss(normalized, recon_combined)
     del recons, masks, slots  # Unused.
 
   # Get and apply gradients.
@@ -71,9 +72,9 @@ def quater_image(image):
 
 def main(argv):
   del argv
-  if not os.path.exists('/home/mmcneil/log_220204/'):
-      os.makedirs('/home/mmcneil/log_220204/')
-  logging.get_absl_handler().use_absl_log_file('absl_logging', '/home/mmcneil/log_220204/')
+  if not os.path.exists('/home/mmcneil/log_220207/'):
+      os.makedirs('/home/mmcneil/log_220207/')
+  logging.get_absl_handler().use_absl_log_file('absl_logging', '/home/mmcneil/log_220207/')
   # Hyperparameters of the model.
   batch_size = FLAGS.batch_size
   num_slots = FLAGS.num_slots
@@ -90,7 +91,13 @@ def main(argv):
 #  data_iterator = data_utils.build_clevr_iterator(
 #      batch_size, split="train", resolution=resolution, shuffle=True,
 #      max_n_objects=6, get_properties=False, apply_crop=True)
-  train_folder = np.load("/home/mmcneil/amartel_data3/mmcneil/fold1/images/fold1/images.npy")
+#  train_folder = np.load("/home/mmcneil/amartel_data3/mmcneil/fold1/images/fold1/images.npy")
+#  data_iterator = iter(train_folder)
+  train_folder = tf.keras.preprocessing.image_dataset_from_directory(
+      "/home/mmcneil/amartel_data3/mmcneil/stroma_typing/",
+      #"/home/mmcneil/amartel_data3/mmcneil/breastpath/train/",
+      batch_size=batch_size,
+      image_size=resolution)
   data_iterator = iter(train_folder)
 
   optimizer = tf.keras.optimizers.Adam(base_learning_rate, epsilon=1e-08)
@@ -115,14 +122,15 @@ def main(argv):
   for _ in range(num_train_steps):
     #batch = next(data_iterator)
     try:
-      first = quater_image(next(data_iterator))
-      second = quater_image(next(data_iterator))
-      batch = np.concatenate((first, second), axis=0)
+      #first = quater_image(next(data_iterator))
+      #second = quater_image(next(data_iterator))
+      #batch = np.concatenate((first, second), axis=0)
+      batch = next(data_iterator)
     except StopIteration:
       data_iterator = iter(train_folder)
-      first = quater_image(next(data_iterator))
-      second = quater_image(next(data_iterator))
-      batch = np.concatenate((first, second), axis=0)
+      #first = quater_image(next(data_iterator))
+      #second = quater_image(next(data_iterator))
+      #batch = np.concatenate((first, second), axis=0)
       
     # Learning rate warm-up.
     if global_step < warmup_steps:
@@ -135,7 +143,7 @@ def main(argv):
     optimizer.lr = learning_rate.numpy()
 
     loss_value = train_step(batch, model, optimizer)
-
+#tf.cast(batch, tf.float32)
     # Update the global step. We update it before logging the loss and saving
     # the model so that the last checkpoint is saved at the last iteration.
     global_step.assign_add(1)
